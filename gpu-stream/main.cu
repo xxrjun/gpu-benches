@@ -136,12 +136,12 @@ void measureFunc(kernel_ptr_type func, int streamCount, int blockSize,
   int spoilerSize = 1024;
 
   GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-      &maxActiveBlocks, func, blockSize, spoilerSize));
+      &maxActiveBlocks, func, 32, spoilerSize));
 
   while (maxActiveBlocks > blocksPerSM) {
-    spoilerSize *= 1.1;
+    spoilerSize += 256;
     GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, func, blockSize, spoilerSize));
+        &maxActiveBlocks, func, 32, spoilerSize));
     // std::cout << maxActiveBlocks << " " << spoilerSize << "\n";
   }
 
@@ -199,9 +199,9 @@ void measureKernels(vector<pair<kernel_ptr_type, int>> kernels, int blockSize,
     return;
 
   int smCount = prop.multiProcessorCount;
-  cout << setw(5) << blockSize << "   " << setw(9)
+  cout << setw(4) << blockSize << "   " << setw(7)
        << smCount * blockSize * blocksPerSM << "  " << setw(5) << setw(6)
-       << blocksPerSM << "   " << setprecision(1) << setw(5)
+       << blocksPerSM << "  " << setprecision(1) << setw(5)
        << (float)(blockSize * blocksPerSM) / prop.maxThreadsPerMultiProcessor *
               100.0
        << "%     |  GB/s: ";
@@ -244,14 +244,18 @@ int main(int argc, char **argv) {
   measureKernels(kernels, 16, 1);
   measureKernels(kernels, 32, 1);
   measureKernels(kernels, 48, 1);
+  measureKernels(kernels, 64, 1);
+  measureKernels(kernels, 80, 1);
+  measureKernels(kernels, 96, 1);
+  measureKernels(kernels, 112, 1);
 
-  for (int warpCount = 2; warpCount <= 80; warpCount++) {
+  for (int warpCount = 4; warpCount <= 80; warpCount++) {
 
     int threadCount = warpCount * 32;
     if (threadCount / 32 % 2 == 0)
       // and (warpCount < 16 || warpCount % 8 == 0))
       measureKernels(kernels, threadCount / 2, 2);
-    else if (warpCount < 8)
+    else if (warpCount < 6)
       measureKernels(kernels, threadCount, 1);
   }
 

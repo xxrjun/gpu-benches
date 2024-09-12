@@ -78,7 +78,7 @@ for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
 
         mClosest = 0
         for m in range(len(threads)):
-            if abs(threads[m] - 3000) < abs(threads[mClosest] - 3000):
+            if abs(threads[m] - 10000) < abs(threads[mClosest] - 10000):
                 mClosest = m
 
         print(threads[mClosest])
@@ -113,7 +113,7 @@ plt.show()
 print(maxbars)
 
 
-def plotXbars(xbars):
+def plotXbars(xbars, filename):
     fig2, ax2 = plt.subplots(figsize=(8, 4))
 
     valueCount = len(list(xbars.values())[0])
@@ -153,7 +153,8 @@ def plotXbars(xbars):
     ax2.set_ylabel("DRAM Bandwidth, GB/s")
     ax2.legend()
     plt.show()
+    fig2.savefig(filename, dpi=300)
 
 
-plotXbars(maxbars)
-plotXbars(minbars)
+plotXbars(maxbars, "maxbars.svg")
+plotXbars(minbars, "minbars.svg")
