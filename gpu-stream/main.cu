@@ -6,14 +6,8 @@
 
 using namespace std;
 
-const int64_t max_buffer_size = 128l * 1024 * 1024 + 2;
+const int64_t max_buffer_size = 512l * 1024 * 1024 + 2;
 double *dA, *dB, *dC, *dD;
-
-#ifdef __NVCC__
-const int spoilerSize = 768;
-#else
-const int spoilerSize = 4 * 1024;
-#endif
 
 using kernel_ptr_type = void (*)(double *A, const double *__restrict__ B,
                                  const double *__restrict__ C,
@@ -24,7 +18,7 @@ template <typename T>
 __global__ void init_kernel(T *A, const T *__restrict__ B,
                             const T *__restrict__ C, const T *__restrict__ D,
                             const size_t N, bool secretlyFalse) {
-  __shared__ double spoiler[spoilerSize];
+  extern __shared__ double spoiler[];
   int tidx = threadIdx.x + blockIdx.x * blockDim.x;
   if (tidx >= N)
     return;
@@ -42,7 +36,7 @@ template <typename T>
 __global__ void read_kernel(T *A, const T *__restrict__ B,
                             const T *__restrict__ C, const T *__restrict__ D,
                             const size_t N, bool secretlyFalse) {
-  __shared__ double spoiler[spoilerSize];
+  extern __shared__ double spoiler[];
   int tidx = threadIdx.x + blockIdx.x * blockDim.x;
   if (tidx >= N)
     return;
@@ -60,7 +54,7 @@ template <typename T>
 __global__ void scale_kernel(T *A, const T *__restrict__ B,
                              const T *__restrict__ C, const T *__restrict__ D,
                              const size_t N, bool secretlyFalse) {
-  __shared__ double spoiler[spoilerSize];
+  extern __shared__ double spoiler[];
   int tidx = threadIdx.x + blockIdx.x * blockDim.x;
   if (tidx >= N)
     return;
@@ -78,7 +72,8 @@ template <typename T>
 __global__ void triad_kernel(T *A, const T *__restrict__ B,
                              const T *__restrict__ C, const T *__restrict__ D,
                              const size_t N, bool secretlyFalse) {
-  __shared__ double spoiler[spoilerSize];
+  extern __shared__ double spoiler[];
+
   int tidx = threadIdx.x + blockIdx.x * blockDim.x;
   if (tidx >= N)
     return;
@@ -97,7 +92,7 @@ __global__ void stencil1d3pt_kernel(T *A, const T *__restrict__ B,
                                     const T *__restrict__ C,
                                     const T *__restrict__ D, const size_t N,
                                     bool secretlyFalse) {
-  __shared__ double spoiler[spoilerSize];
+  extern __shared__ double spoiler[];
   int tidx = threadIdx.x + blockIdx.x * blockDim.x;
   if (tidx >= N - 1 || tidx == 0)
     return;
@@ -115,7 +110,7 @@ __global__ void stencil1d5pt_kernel(T *A, const T *__restrict__ B,
                                     const T *__restrict__ C,
                                     const T *__restrict__ D, const size_t N,
                                     bool secretlyFalse) {
-  __shared__ double spoiler[spoilerSize];
+  extern __shared__ double spoiler[];
   int tidx = threadIdx.x + blockIdx.x * blockDim.x;
   if (tidx >= N - 2 || tidx < 2)
     return;
@@ -133,39 +128,41 @@ void measureFunc(kernel_ptr_type func, int streamCount, int blockSize,
                  int blocksPerSM) {
 
 #ifdef __NVCC__
+  GPU_ERROR(cudaFuncSetAttribute(
+      func, cudaFuncAttributePreferredSharedMemoryCarveout, 5));
+#endif
+
   int maxActiveBlocks = 0;
-  int currentCarveOut = 0;
-  while (maxActiveBlocks < blocksPerSM) {
-    GPU_ERROR(cudaFuncSetAttribute(
-        func, cudaFuncAttributePreferredSharedMemoryCarveout, currentCarveOut));
+  int spoilerSize = 1024;
+
+  GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+      &maxActiveBlocks, func, blockSize, spoilerSize));
+
+  while (maxActiveBlocks > blocksPerSM) {
+    spoilerSize *= 1.1;
     GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &maxActiveBlocks, func, blockSize, 0));
-    // std::cout << maxActiveBlocks << " " << currentCarveOut << "\n";
-    currentCarveOut++;
+        &maxActiveBlocks, func, blockSize, spoilerSize));
+    // std::cout << maxActiveBlocks << " " << spoilerSize << "\n";
   }
 
-#else
-
-  int maxActiveBlocks = 0;
-  GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&maxActiveBlocks,
-                                                          func, blockSize, 0));
-  if (maxActiveBlocks > blocksPerSM)
-    cout << "! " << maxActiveBlocks << " blocks per SM ";
-#endif
+  /*if (maxActiveBlocks != blocksPerSM)
+    std::cout << "Configure " << maxActiveBlocks << " instead of "
+              << blocksPerSM << "\n";
+*/
 
   MeasurementSeries time;
   MeasurementSeries power;
 
-  func<<<max_buffer_size / blockSize + 1, blockSize>>>(dA, dB, dC, dD,
-                                                       max_buffer_size, false);
+  func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
+      dA, dB, dC, dD, max_buffer_size, false);
 
   for (int iter = 0; iter < 9; iter++) {
     GPU_ERROR(cudaDeviceSynchronize());
     double t1 = dtime();
     GPU_ERROR(cudaDeviceSynchronize());
-    func<<<max_buffer_size / blockSize + 1, blockSize>>>(
+    func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
         dA, dB, dC, dD, max_buffer_size, false);
-    func<<<max_buffer_size / blockSize + 1, blockSize>>>(
+    func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
         dA, dB, dC, dD, max_buffer_size, false);
     GPU_ERROR(cudaDeviceSynchronize());
     double t2 = dtime();
@@ -189,17 +186,25 @@ void measureKernels(vector<pair<kernel_ptr_type, int>> kernels, int blockSize,
   GPU_ERROR(cudaGetDevice(&deviceId));
   GPU_ERROR(cudaGetDeviceProperties(&prop, deviceId));
   std::string deviceName = prop.name;
-  int threadsPerSM = prop.maxThreadsPerMultiProcessor;
-  int threadsPerBlock = prop.maxThreadsPerBlock;
+  if (deviceName.starts_with("AMD Radeon RX 6")) {
+    prop.maxThreadsPerMultiProcessor = 1024;
+    prop.multiProcessorCount *= 2;
+  }
 
-  if (blockSize * blocksPerSM > threadsPerSM || blockSize > threadsPerBlock)
+  // std::cout << prop.maxThreadsPerMultiProcessor << " "
+  //           << prop.maxThreadsPerBlock << "\n";
+
+  if (blockSize * blocksPerSM > prop.maxThreadsPerMultiProcessor ||
+      blockSize > prop.maxThreadsPerBlock)
     return;
 
   int smCount = prop.multiProcessorCount;
-  cout << setw(9) << blockSize << "   " << setw(9) << smCount * blockSize
-       << "  " << setw(5) << setprecision(1)
-       << (float)(blockSize * blocksPerSM) / threadsPerSM * 100.0
-       << " %  |  GB/s: ";
+  cout << setw(5) << blockSize << "   " << setw(9)
+       << smCount * blockSize * blocksPerSM << "  " << setw(5) << setw(6)
+       << blocksPerSM << "   " << setprecision(1) << setw(5)
+       << (float)(blockSize * blocksPerSM) / prop.maxThreadsPerMultiProcessor *
+              100.0
+       << "%     |  GB/s: ";
 
   for (auto kernel : kernels) {
     measureFunc(kernel.first, kernel.second, blockSize, blocksPerSM);
@@ -229,15 +234,25 @@ int main(int argc, char **argv) {
       {scale_kernel<double>, 2},        {triad_kernel<double>, 3},
       {stencil1d3pt_kernel<double>, 2}, {stencil1d5pt_kernel<double>, 2}};
 
-  cout << "blockSize   threads       %occ  |                init"
+  cout << "block smBlocks   threads    occ%   |                init"
        << "       read       scale     triad       3pt        5pt\n";
 
   // for (int blockSize = 32; blockSize <= 1024; blockSize += 32) {
   //   measureKernels(kernels, blockSize, 1);
   // }
 
-  for (int blockSize = 32; blockSize <= 1024; blockSize += 32) {
-    measureKernels(kernels, blockSize, 2);
+  measureKernels(kernels, 16, 1);
+  measureKernels(kernels, 32, 1);
+  measureKernels(kernels, 48, 1);
+
+  for (int warpCount = 2; warpCount <= 80; warpCount++) {
+
+    int threadCount = warpCount * 32;
+    if (threadCount / 32 % 2 == 0)
+      // and (warpCount < 16 || warpCount % 8 == 0))
+      measureKernels(kernels, threadCount / 2, 2);
+    else if (warpCount < 8)
+      measureKernels(kernels, threadCount, 1);
   }
 
   GPU_ERROR(cudaFree(dA));
