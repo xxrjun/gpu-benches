@@ -152,9 +152,10 @@ def plotXbars(xbars, filename):
     ax2.set_xticklabels([f[:-4].upper() for f in list(maxbars.keys())])
     ax2.set_ylabel("DRAM Bandwidth, GB/s")
     ax2.legend()
-    plt.show()
+    fig2.tight_layout()
     fig2.savefig(filename, dpi=300)
+    plt.show()
 
 
-plotXbars(maxbars, "maxbars.svg")
-plotXbars(minbars, "minbars.svg")
+plotXbars(maxbars, "maxbars.pdf")
+plotXbars(minbars, "minbars.pdf")
