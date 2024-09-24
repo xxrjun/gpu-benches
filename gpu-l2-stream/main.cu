@@ -1,0 +1,303 @@
+#include "../MeasurementSeries.hpp"
+#include "../dtime.hpp"
+#include "../gpu-clock.cuh"
+#include "../gpu-error.h"
+#include "../gpu-metrics/gpu-metrics.hpp"
+#include <iomanip>
+#include <iostream>
+using namespace std;
+
+const int64_t max_buffer_size = 256l * 1024 * 1024 + 2;
+double *dA, *dB, *dC, *dD;
+
+using kernel_ptr_type = void (*)(double *A, const double *__restrict__ B,
+                                 const double *__restrict__ C,
+                                 const double *__restrict__ D, const size_t N,
+                                 bool secretlyFalse);
+
+template <typename T>
+__global__ void init_kernel(T *A, const T *__restrict__ B,
+                            const T *__restrict__ C, const T *__restrict__ D,
+                            const size_t N, bool secretlyFalse) {
+  extern __shared__ double spoiler[];
+  int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+  if (tidx >= N)
+    return;
+
+  if (secretlyFalse)
+    spoiler[threadIdx.x] = B[threadIdx.x];
+
+  A[tidx] = 0.23;
+
+  if (secretlyFalse)
+    A[tidx] = spoiler[tidx];
+}
+
+template <typename T>
+__global__ void read_kernel(T *A, const T *__restrict__ B,
+                            const T *__restrict__ C, const T *__restrict__ D,
+                            const size_t N, bool secretlyFalse) {
+  extern __shared__ double spoiler[];
+  int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+  if (tidx >= N)
+    return;
+
+  if (secretlyFalse)
+    spoiler[threadIdx.x] = B[threadIdx.x];
+
+  double temp = B[tidx];
+
+  if (secretlyFalse || temp == 123.0)
+    A[tidx] = temp + spoiler[tidx];
+}
+
+template <typename T, int length>
+__global__ void scale_kernel(T *A, const T *__restrict__ B,
+                             const T *__restrict__ C, const T *__restrict__ D,
+                             const size_t N, bool secretlyFalse) {
+  extern __shared__ double spoiler[];
+  int tidx = (threadIdx.x + blockIdx.x * blockDim.x) % length;
+
+  if (tidx >= N)
+    return;
+
+  if (secretlyFalse)
+    spoiler[threadIdx.x] = B[threadIdx.x];
+
+  A[tidx] = B[tidx] * 1.2;
+
+  if (secretlyFalse)
+    A[tidx] = spoiler[tidx];
+}
+
+template <typename T, int length>
+__global__ void triad_kernel(T *A, const T *__restrict__ B,
+                             const T *__restrict__ C, const T *__restrict__ D,
+                             const size_t N, bool secretlyFalse) {
+  extern __shared__ double spoiler[];
+
+  int tidx = threadIdx.x + blockIdx.x * blockDim.x % length;
+  if (tidx >= N)
+    return;
+
+  if (secretlyFalse)
+    spoiler[threadIdx.x] = B[threadIdx.x];
+
+  A[tidx] = B[tidx] * 1.2 + C[tidx];
+
+  if (secretlyFalse)
+    A[tidx] = spoiler[tidx];
+}
+
+template <typename T>
+__global__ void stencil1d3pt_kernel(T *A, const T *__restrict__ B,
+                                    const T *__restrict__ C,
+                                    const T *__restrict__ D, const size_t N,
+                                    bool secretlyFalse) {
+
+  extern __shared__ double spoiler[];
+  int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+  if (tidx >= N - 1 || tidx == 0)
+    return;
+
+  if (secretlyFalse)
+    spoiler[threadIdx.x] = B[threadIdx.x];
+
+  A[tidx] = 0.5 * B[tidx - 1] - 1.0 * B[tidx] + 0.5 * B[tidx + 1];
+
+  if (secretlyFalse)
+    A[tidx] = spoiler[tidx];
+}
+template <typename T>
+__global__ void stencil1d5pt_kernel(T *A, const T *__restrict__ B,
+                                    const T *__restrict__ C,
+                                    const T *__restrict__ D, const size_t N,
+                                    bool secretlyFalse, const size_t length) {
+
+  extern __shared__ double spoiler[];
+  int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+  if (tidx >= N - 2 || tidx < 2)
+    return;
+
+  if (secretlyFalse)
+    spoiler[threadIdx.x] = B[threadIdx.x];
+
+  A[tidx] = 0.25 * B[tidx - 2] + 0.25 * B[tidx - 1] - 1.0 * B[tidx] +
+            0.5 * B[tidx + 1] + 0.5 * B[tidx + 2];
+
+  if (secretlyFalse)
+    A[tidx] = spoiler[tidx];
+}
+void measureFunc(kernel_ptr_type func, int streamCount, int blockSize,
+                 int blocksPerSM, const size_t length) {
+
+#ifdef __NVCC__
+  GPU_ERROR(cudaFuncSetAttribute(
+      func, cudaFuncAttributePreferredSharedMemoryCarveout, 20));
+#endif
+
+  int maxActiveBlocks = 0;
+  int spoilerSize = 1024;
+
+  GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+      &maxActiveBlocks, func, 32, spoilerSize));
+
+  while (maxActiveBlocks > blocksPerSM) {
+    spoilerSize += 256;
+    GPU_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &maxActiveBlocks, func, 32, spoilerSize));
+    // std::cout << maxActiveBlocks << " " << spoilerSize << "\n";
+  }
+
+  if (maxActiveBlocks == 0)
+    std::cout << "Configure " << maxActiveBlocks << " instead of "
+              << blocksPerSM << "\n";
+
+  MeasurementSeries time;
+  MeasurementSeries power;
+
+  func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
+      dA, dB, dC, dD, max_buffer_size, false);
+
+  for (int iter = 0; iter < 9; iter++) {
+    GPU_ERROR(cudaDeviceSynchronize());
+    double t1 = dtime();
+    GPU_ERROR(cudaDeviceSynchronize());
+    func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
+        dA, dB, dC, dD, max_buffer_size, false);
+    func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
+        dA, dB, dC, dD, max_buffer_size, false);
+    GPU_ERROR(cudaDeviceSynchronize());
+    double t2 = dtime();
+    time.add((t2 - t1) / 2);
+  }
+
+  cout << fixed << setprecision(0);
+  measureDRAMBytesStart();
+  func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
+      dA, dB, dC, dD, max_buffer_size, false);
+  auto metrics = measureDRAMBytesStop();
+  cout << setw(3) << metrics[0] / time.median() / 1.0e9 << " " << setw(3)
+       << metrics[1] / time.median() / 1.0e9 << " ";
+
+  measureL2BytesStart();
+  func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
+      dA, dB, dC, dD, max_buffer_size, false);
+  metrics = measureL2BytesStop();
+  cout << setw(3) << metrics[0] / time.median() / 1.0e9 << " " << setw(3)
+       << metrics[1] / time.median() / 1.0e9 << " ";
+
+  cout << fixed << setprecision(0) << " " //<< setw(5)
+       << streamCount * max_buffer_size * sizeof(double) / time.median() * 1e-9
+       << ", ";
+  cout.flush();
+}
+
+void measureKernels(vector<pair<kernel_ptr_type, int>> kernels, int blockSize,
+                    int blocksPerSM) {
+  cudaDeviceProp prop;
+  int deviceId;
+  GPU_ERROR(cudaGetDevice(&deviceId));
+  GPU_ERROR(cudaGetDeviceProperties(&prop, deviceId));
+  std::string deviceName = prop.name;
+  if (deviceName.starts_with("AMD Radeon RX 6")) {
+    prop.maxThreadsPerMultiProcessor = 1024;
+    prop.multiProcessorCount *= 2;
+  }
+
+  // std::cout << prop.maxThreadsPerMultiProcessor << " "
+  //           << prop.maxThreadsPerBlock << "\n";
+
+  if (blockSize * blocksPerSM > prop.maxThreadsPerMultiProcessor ||
+      blockSize > prop.maxThreadsPerBlock)
+    return;
+
+  int smCount = prop.multiProcessorCount;
+  cout << setw(4) << blockSize << "   " << setw(7)
+       << smCount * blockSize * blocksPerSM << "  " << setw(5) << setw(6)
+       << blocksPerSM << "  " << setprecision(1) << setw(5)
+       << (float)(blockSize * blocksPerSM) / prop.maxThreadsPerMultiProcessor *
+              100.0
+       << "%     |  GB/s: ";
+
+  for (auto kernel : kernels) {
+    measureFunc(kernel.first, kernel.second, blockSize, blocksPerSM,
+                211 * 1024);
+  }
+
+  cout << "\n";
+}
+
+template <typename T, T... S, typename F>
+constexpr void for_sequence(std::integer_sequence<T, S...>, F f) {
+  (static_cast<void>(f(std::integral_constant<T, S>{})), ...);
+}
+
+template <auto n, typename F> constexpr void for_sequence(F f) {
+  for_sequence(std::make_integer_sequence<decltype(n), n>{}, f);
+}
+
+int main(int argc, char **argv) {
+  initMeasureMetric();
+  unsigned int clock = getGPUClock();
+  GPU_ERROR(cudaMalloc(&dA, max_buffer_size * sizeof(double)));
+  GPU_ERROR(cudaMalloc(&dB, max_buffer_size * sizeof(double)));
+  GPU_ERROR(cudaMalloc(&dC, max_buffer_size * sizeof(double)));
+  GPU_ERROR(cudaMalloc(&dD, max_buffer_size * sizeof(double)));
+
+  init_kernel<<<max_buffer_size / 1024 + 1, 1024>>>(dA, dA, dA, dA,
+                                                    max_buffer_size, false);
+  init_kernel<<<max_buffer_size / 1024 + 1, 1024>>>(dB, dB, dB, dB,
+                                                    max_buffer_size, false);
+  init_kernel<<<max_buffer_size / 1024 + 1, 1024>>>(dC, dC, dC, dC,
+                                                    max_buffer_size, false);
+  init_kernel<<<max_buffer_size / 1024 + 1, 1024>>>(dD, dD, dD, dD,
+                                                    max_buffer_size, false);
+  GPU_ERROR(cudaDeviceSynchronize());
+
+  vector<pair<kernel_ptr_type, int>> kernels = {
+      //  {init_kernel<double>, 1},         {read_kernel<double>, 1},
+      {scale_kernel<double, 123 * 1024>, 2},
+      {triad_kernel<double, 123 * 1024>, 3},
+      //{stencil1d3pt_kernel<double>, 2}, {stencil1d5pt_kernel<double>, 2}
+  };
+
+  cout << "block smBlocks   threads    occ%   |                init"
+       << "       read       scale     triad       3pt        5pt\n";
+
+  // for (int blockSize = 32; blockSize <= 1024; blockSize += 32) {
+  //   measureKernels(kernels, blockSize, 1);
+  // }
+
+  for_sequence<29>([](auto i) {
+    vector<pair<kernel_ptr_type, int>> kernels = {
+        //  {init_kernel<double>, 1},         {read_kernel<double>, 1},
+        {scale_kernel<double, (i + 1) * 10 * 1024>, 2}
+
+        //{stencil1d3pt_kernel<double>, 2}, {stencil1d5pt_kernel<double>, 2}
+    };
+    measureKernels(kernels, 16, 1);
+  });
+
+  measureKernels(kernels, 32, 1);
+  measureKernels(kernels, 48, 1);
+  measureKernels(kernels, 64, 1);
+  measureKernels(kernels, 80, 1);
+  measureKernels(kernels, 96, 1);
+  measureKernels(kernels, 112, 1);
+
+  for (int warpCount = 4; warpCount <= 80; warpCount++) {
+
+    int threadCount = warpCount * 32;
+    if (threadCount / 32 % 2 == 0)
+      // and (warpCount < 16 || warpCount % 8 == 0))
+      measureKernels(kernels, threadCount / 2, 2);
+    else if (warpCount < 6)
+      measureKernels(kernels, threadCount, 1);
+  }
+
+  GPU_ERROR(cudaFree(dA));
+  GPU_ERROR(cudaFree(dB));
+  GPU_ERROR(cudaFree(dC));
+  GPU_ERROR(cudaFree(dD));
+}
