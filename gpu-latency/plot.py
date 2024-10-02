@@ -2,6 +2,7 @@
 
 import os
 import csv
+
 import sys
 
 sys.path.append("..")
@@ -15,21 +16,34 @@ for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
     with open(filename, newline="") as csvfile:
         csvreader = csv.reader(csvfile, delimiter=" ", skipinitialspace=True)
         sizes = []
-        bw = []
+        min = []
+        max = []
+        avg = []
+        med = []
         for row in csvreader:
-            if len(row) == 0 or row[0] == "clock:":
+            if len(row) < 8 or row[0] == "clock:":
                 continue
             sizes.append(float(row[2]))
-            bw.append(float(row[4]))
+            avg.append(float(row[4]))
+            med.append(float(row[5]))
+            min.append(float(row[6]))
+            max.append(float(row[7]))
+
         print(filename, getOrderNumber(filename))
+
         ax.plot(
             sizes,
-            bw,
+            med,
+            # "-x",
             label=filename[:-4].upper(),
-            markeredgewidth=0,
-            color="C" + str(getOrderNumber(filename)),
+            color=getDeviceColor(filename),
             **lineStyle
         )
+
+        plt.fill_between(
+            sizes, min, max, alpha=0.4, color=getDeviceColor(filename), edgecolor=None
+        )
+
 
 ax.set_xlabel("chain data volume, kB")
 ax.set_ylabel("latency, cycles")
@@ -45,9 +59,13 @@ formatter = matplotlib.ticker.FuncFormatter(
 ax.get_xaxis().set_major_formatter(formatter)
 # ax.get_yaxis().set_major_formatter(formatter)
 
-ax.set_xticks([16, 128, 256, 6 * 1024, 20 * 1024, 40 * 1024, 128 * 1024])
+ax.set_xticks(
+    [16, 128, 256, 4 * 1024, 6 * 1024, 20 * 1024, 40 * 1024, 128 * 1024, 512 * 1024]
+)
+ax.set_xlim([8, 800 * 1024])
 
-ax.set_ylim([0, 700])
+
+ax.set_ylim([0, 800])
 
 fig.autofmt_xdate()
 ax.legend()
