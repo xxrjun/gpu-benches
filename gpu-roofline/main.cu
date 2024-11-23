@@ -115,24 +115,34 @@ int main(int argc, char **argv) {
 
 #pragma omp barrier
 
-    double start = dtime();
+    cudaEvent_t start, stop;
+    GPU_ERROR(cudaEventCreate(&start));
+    GPU_ERROR(cudaEventCreate(&stop));
+
+    GPU_ERROR(cudaEventRecord(start));
     for (size_t iter = 0; iter < iters; iter++) {
       testfun<dtype, N, M, BLOCKSIZE><<<blockCount, BLOCKSIZE>>>(dA, dB, dC);
     }
+    GPU_ERROR(cudaEventRecord(stop));
+
     MeasurementSeries powerSeries;
     MeasurementSeries clockSeries;
+    MeasurementSeries temperatureSeries;
 
-    auto stats = getGPUStats(deviceId);
-    for (int i = 0; i < 21; i++) {
-      usleep(100000);
-      stats = getGPUStats(deviceId);
+    do {
+      usleep(1000);
+      auto stats = getGPUStats(deviceId);
       powerSeries.add(stats.power);
       clockSeries.add(stats.clock);
-    }
+      temperatureSeries.add(stats.temperature);
+    } while (cudaEventQuery(stop) == cudaErrorNotReady);
 
-    GPU_ERROR(cudaDeviceSynchronize());
-    double end = dtime();
+    GPU_ERROR(cudaEventSynchronize(stop));
     GPU_ERROR(cudaGetLastError());
+
+    float milliseconds;
+    GPU_ERROR(cudaEventElapsedTime(&milliseconds, start, stop));
+    float dt = milliseconds / 1000;
 
 #pragma omp barrier
 #pragma omp for ordered schedule(static, 1)
@@ -143,12 +153,12 @@ int main(int argc, char **argv) {
              << " blocks   " << setw(3) << N << " its      "
              << (2.0 + N * 2.0) / (2.0 * sizeof(dtype)) << " Fl/B      "
              << setprecision(0) << setw(5)
-             << iters * 2 * data_len * sizeof(dtype) / (end - start) * 1.0e-9
+             << iters * 2 * data_len * sizeof(dtype) / dt * 1.0e-9
              << " GB/s    " << setw(6)
-             << iters * (2 + N * 2) * data_len / (end - start) * 1.0e-9
-             << " GF/s   " << clockSeries.median() << " Mhz   "
-             << powerSeries.maxValue() / 1000 << " W   " << stats.temperature
-             << "°C\n";
+             << iters * (2 + N * 2) * data_len / dt * 1.0e-9 << " GF/s   "
+             << clockSeries.median() << " Mhz   "
+             << powerSeries.maxValue() / 1000 << " W   "
+             << temperatureSeries.median() << "°C\n";
       }
     }
     GPU_ERROR(cudaFree(dA));
