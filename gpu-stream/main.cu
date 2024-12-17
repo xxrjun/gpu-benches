@@ -6,7 +6,7 @@
 
 using namespace std;
 
-const int64_t max_buffer_size = 512l * 1024 * 1024 + 2;
+const int64_t max_buffer_size = 256l * 1024 * 1024 + 2;
 double *dA, *dB, *dC, *dD;
 
 using kernel_ptr_type = void (*)(double *A, const double *__restrict__ B,
@@ -81,7 +81,7 @@ __global__ void triad_kernel(T *A, const T *__restrict__ B,
   if (secretlyFalse)
     spoiler[threadIdx.x] = B[threadIdx.x];
 
-  A[tidx] = B[tidx] * 1.2 + C[tidx];
+  A[tidx] = B[tidx] * D[tidx] + C[tidx];
 
   if (secretlyFalse)
     A[tidx] = spoiler[tidx];
@@ -231,7 +231,7 @@ int main(int argc, char **argv) {
 
   vector<pair<kernel_ptr_type, int>> kernels = {
       {init_kernel<double>, 1},         {read_kernel<double>, 1},
-      {scale_kernel<double>, 2},        {triad_kernel<double>, 3},
+      {scale_kernel<double>, 2},        {triad_kernel<double>, 4},
       {stencil1d3pt_kernel<double>, 2}, {stencil1d5pt_kernel<double>, 2}};
 
   cout << "block smBlocks   threads    occ%   |                init"
