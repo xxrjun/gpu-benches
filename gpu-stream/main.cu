@@ -151,30 +151,28 @@ void measureFunc(kernel_ptr_type func, int streamCount, int blockSize,
 */
 
   MeasurementSeries time;
-  MeasurementSeries power;
 
   func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
       dA, dB, dC, dD, max_buffer_size, false);
 
-  for (int iter = 0; iter < 9; iter++) {
-    GPU_ERROR(cudaDeviceSynchronize());
-    double t1 = dtime();
-    GPU_ERROR(cudaDeviceSynchronize());
+  GPU_ERROR(cudaDeviceSynchronize());
+
+  cudaEvent_t start, stop;
+  for (int iter = 0; iter < 31; iter++) {
+    GPU_ERROR(cudaEventCreate(&start));
+    GPU_ERROR(cudaEventCreate(&stop));
+    GPU_ERROR(cudaEventRecord(start));
     func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
         dA, dB, dC, dD, max_buffer_size, false);
-    func<<<max_buffer_size / blockSize + 1, blockSize, spoilerSize>>>(
-        dA, dB, dC, dD, max_buffer_size, false);
-    GPU_ERROR(cudaDeviceSynchronize());
-    double t2 = dtime();
-    time.add((t2 - t1) / 2);
+    GPU_ERROR(cudaEventRecord(stop));
+    GPU_ERROR(cudaEventSynchronize(stop));
+    float milliseconds = 0;
+    GPU_ERROR(cudaEventElapsedTime(&milliseconds, start, stop));
+
+    time.add(milliseconds / 1000);
   }
 
-  cout << fixed << setprecision(0)
-       << setw(6)
-       //<< time.value() * 1000 << " "
-       //<< setw(5) << time.spread() * 100
-       //<< "   " << setw(5) << power.median() / 1000
-       << " " << setw(5)
+  cout << fixed << setprecision(0) << setw(6) << " " << setw(5)
        << streamCount * max_buffer_size * sizeof(double) / time.median() * 1e-9;
   cout.flush();
 }

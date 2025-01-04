@@ -10,8 +10,9 @@ import sys
 sys.path.append("..")
 from device_order import *
 
+# fig, (ax, ax2) = plt.subplots(1, 2, sharey=True, facecolor="w", figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(6, 4))
 
-fig, ax = plt.subplots(figsize=(8, 4))
 # fig2, ax2 = plt.subplots(figsize=(8, 4))
 # fig3, ax3 = plt.subplots(figsize=(8, 4))
 
@@ -19,7 +20,17 @@ fig, ax = plt.subplots(figsize=(8, 4))
 maxbars = {}
 minbars = {}
 
-devicesToInclude = ["a40", "l40", "v100", "a100_80", "gh200", "mi210", "rx6900xt"]
+devicesToInclude = [
+    "a40",
+    "l40",
+    "v100",
+    "a100_80",
+    "gh200",
+    "mi210",
+    "rx6900xt",
+    "mi300x",
+    # "mi300a",
+]
 
 
 for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
@@ -39,7 +50,7 @@ for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
         stencil5pt = []
 
         for row in csvreader:
-            if row[0].startswith("block"):
+            if row[0].startswith("block") or len(row) < 12:
                 continue
 
             # print(row)
@@ -52,6 +63,9 @@ for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
             stencil3pt.append(float(row[10]))
             stencil5pt.append(float(row[11]))
 
+        if len(threads) < 1:
+            continue
+
         # locs = threads#[15 + l / 6 if l > 15 else l for l in locs]
         # print(locs)
         # print(threads)
@@ -59,11 +73,19 @@ for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
         ax.plot(
             np.array(threads),
             scale,
-            label=filename[:-4].upper(),
+            label=order[getOrderNumber(filename)].upper(),
             color=getDeviceColor(filename),
             **lineStyle
         )
+        # ax2.plot(
+        #    np.array(threads),
+        #    triad,
+        #    label=filename[:-4].upper(),
+        #    color=getDeviceColor(filename),
+        #    **lineStyle
+        # )
         print(filename, getOrderNumber(filename))
+
         # ax.plot(threads, triad, "-<", label=filename, color="C" + str(color))
         # ax.plot(threads, read, "-^", label=filename, color="C" + str(color))
 
@@ -101,12 +123,21 @@ ax.set_ylabel("DRAM bandwidth, GB/s")
 # ax.axhline(800, linestyle="--", color="C0")
 
 # ax.grid()
+#
+#
+# ax.set_xscale("log")
 ax.legend()
-ax.set_ylim([0, ax.get_ylim()[1]])
-ax.set_xlim([0, ax.get_xlim()[1]])
 
-fig.tight_layout()
+ax.set_ylim([0, ax.get_ylim()[1]])
+ax.set_xlim([0, 400000])
+
+formatter = matplotlib.ticker.FuncFormatter(lambda x, pos: "{:.0f}K".format(x // 1000))
+ax.get_xaxis().set_major_formatter(formatter)
+
+fig.tight_layout(pad=0)
 fig.savefig("cuda-stream.svg", dpi=300)
+fig.savefig("cuda-stream.pdf", dpi=300)
+
 
 plt.show()
 
@@ -114,7 +145,7 @@ print(maxbars)
 
 
 def plotXbars(xbars, filename):
-    fig2, ax2 = plt.subplots(figsize=(8, 4))
+    fig2, ax2 = plt.subplots(figsize=(6, 3))
 
     valueCount = len(list(xbars.values())[0])
     c = 0
@@ -149,10 +180,13 @@ def plotXbars(xbars, filename):
 
     print(list(maxbars.keys()))
     ax2.set_xticks(range(len(list(maxbars.keys()))))
-    ax2.set_xticklabels([f[:-4].upper() for f in list(maxbars.keys())])
+    ax2.set_xticklabels(
+        [order[getOrderNumber(f)].upper() for f in list(maxbars.keys())]
+    )
     ax2.set_ylabel("DRAM Bandwidth, GB/s")
+    fig2.autofmt_xdate()
     ax2.legend()
-    fig2.tight_layout()
+    fig2.tight_layout(pad=0)
     fig2.savefig(filename, dpi=300)
     plt.show()
 
