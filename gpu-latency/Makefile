@@ -21,3 +21,5 @@ $(PREFIX)hip-$(NAME): main.hip Makefile ../rocm-metrics/rocm-metrics.hpp
 
 clean:
 	rm -f cuda-$(NAME) hip-$(NAME)
+	rm -f *-cuda-$(NAME) *-hip-$(NAME)
+	rm main.hip

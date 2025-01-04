@@ -12,6 +12,8 @@
 
 using namespace std;
 
+typedef int64_t dtype;
+
 __device__ unsigned int smid() {
   unsigned int r;
 
@@ -42,9 +44,11 @@ __global__ void pchase(T *buf, T *__restrict__ dummy_buf, int64_t N) {
 
 int main(int argc, char **argv) {
 
+#ifdef __NVCC__
+  GPU_ERROR(cudaFuncSetAttribute(
+      pchase<dtype>, cudaFuncAttributePreferredSharedMemoryCarveout, 0));
+#endif
   unsigned int clock = getGPUClock();
-
-  typedef int64_t dtype;
 
   const int cl_size = 128 / sizeof(int64_t);
   const int skip_factor = 1;
@@ -52,14 +56,14 @@ int main(int argc, char **argv) {
   std::random_device rd;
   std::mt19937 g(rd());
 
-  for (int64_t LEN = 16; LEN < (1 << 24); LEN = LEN * 1.04 + 1) {
+  for (int64_t LEN = 16; LEN < (1 << 24); LEN = LEN * 1.042 + 1 + rand() % 11) {
     if (LEN * skip_factor * cl_size * sizeof(dtype) > 120 * 1024 * 1024)
       LEN *= 1.1;
 
     MeasurementSeries times;
-    const int64_t iters = max(LEN, (int64_t)1000000);
+    const int64_t iters = max(LEN, (int64_t)100000);
 
-    for (int i = 0; i < 11; i++) {
+    for (int i = 0; i < 21; i++) {
 
       vector<int64_t> order(LEN);
       int64_t *buf = NULL;
@@ -98,6 +102,8 @@ int main(int argc, char **argv) {
                            cudaMemcpyHostToDevice));
 
       pchase<dtype><<<1, 1>>>(buf, dummy_buf, iters);
+      pchase<dtype><<<1, 1>>>(buf, dummy_buf, iters);
+
       cudaEvent_t start, stop;
       GPU_ERROR(cudaEventCreate(&start));
       GPU_ERROR(cudaEventCreate(&stop));
@@ -121,8 +127,8 @@ int main(int argc, char **argv) {
     }
     double dt = times.value();
     double dtmed = times.median();
-    double dtmin = times.minValue();
-    double dtmax = times.maxValue();
+    double dtmin = times.getPercentile(0.05);
+    double dtmax = times.getPercentile(0.95);
     cout << setw(9) << iters << " " << setw(5) << clock << " " //
          << setw(8) << skip_factor * LEN * cl_size * sizeof(dtype) / 1024.0
          << " "                                            //

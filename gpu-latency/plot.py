@@ -9,10 +9,25 @@ sys.path.append("..")
 from device_order import *
 
 
-fig, ax = plt.subplots(figsize=(8, 4))
+devicesToInclude = []
+
+
+if len(sys.argv) > 1 and sys.argv[1] == "AMD":
+    devicesToInclude = ["MI100", "MI210", "MI300X", "RX6900XT"]
+
+if len(sys.argv) > 1 and sys.argv[1] == "NV":
+    devicesToInclude = ["A40", "L40", "V100", "A100", "GH200"]
+
+
+fig, ax = plt.subplots(figsize=(6, 4))
 for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
-    if not filename.endswith(".txt") or filename[:-4] not in order:
+    if not filename.endswith(".txt") or getOrderNumber(filename) > len(order):
         continue
+    if len(devicesToInclude) > 0 and not any(
+        [filename.upper().startswith(d) for d in devicesToInclude]
+    ):
+        continue
+
     with open(filename, newline="") as csvfile:
         csvreader = csv.reader(csvfile, delimiter=" ", skipinitialspace=True)
         sizes = []
@@ -35,7 +50,7 @@ for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
             sizes,
             med,
             # "-x",
-            label=filename[:-4].upper(),
+            label=order[getOrderNumber(filename)].upper(),
             color=getDeviceColor(filename),
             **lineStyle
         )
@@ -60,17 +75,34 @@ ax.get_xaxis().set_major_formatter(formatter)
 # ax.get_yaxis().set_major_formatter(formatter)
 
 ax.set_xticks(
-    [16, 128, 256, 4 * 1024, 6 * 1024, 20 * 1024, 40 * 1024, 128 * 1024, 512 * 1024]
+    [
+        16,
+        32,
+        128,
+        256,
+        4 * 1024,
+        6 * 1024,
+        8 * 1024,
+        20 * 1024,
+        30 * 1024,
+        60 * 1024,
+        128 * 1024,
+        256 * 1024,
+        512 * 1024,
+    ]
 )
 ax.set_xlim([8, 800 * 1024])
 
 
-ax.set_ylim([0, 800])
+ax.set_ylim([0, 980])
+
+ax.set_yticks((0, 30, 100, 200, 300, 400, 500, 600, 700, 800, 900))
 
 fig.autofmt_xdate()
 ax.legend()
 ax.set_ylim([0, ax.get_ylim()[1]])
-fig.tight_layout()
-fig.savefig("latency_plot.svg")
+fig.tight_layout(pad=0)
+fig.savefig("latencies" + ("_" + sys.argv[1] if len(sys.argv) > 1 else "") + ".svg")
+fig.savefig("latencies" + ("_" + sys.argv[1] if len(sys.argv) > 1 else "") + ".pdf")
 
 plt.show()
