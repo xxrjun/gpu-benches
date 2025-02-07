@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 #include <vector>
 
@@ -39,12 +40,21 @@ public:
     return *begin(data);
   }
 
+  double getPercentile(double percentile) {
+    if (data.size() == 0)
+      return 0.0;
+    std::sort(begin(data), end(data));
+    int index = (int)round((data.size() - 1) * percentile);
+    return data[index];
+  }
+
   double maxValue() {
     if (data.size() == 0)
       return 0.0;
     std::sort(begin(data), end(data));
     return data.back();
   }
+
   double spread() {
     if (data.size() <= 1)
       return 0.0;
@@ -53,6 +63,7 @@ public:
     std::sort(begin(data), end(data));
     return abs(*(begin(data)) - *(end(data) - 1)) / value();
   }
+  int count() { return data.size(); }
 
 private:
   std::vector<double> data;
