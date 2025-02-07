@@ -37,13 +37,24 @@ Note that the H100 results are for the PCIe version, which has lower DRAM bandwi
 
 ## gpu-latency
 
-Pointer chasing benchmark for latency measurement. A single warp fully traverses a buffer in random order. A partitioning scheme is used to ensure that all cache lines are hit exactly once before they are accessed again. Latency in clock cycles is computed with the current clock rate.
+This is a pointer chasing benchmark for memory access latency measurement. A single warp fully traverses a buffer in random order. A partitioning scheme is used to ensure that all cache lines are hit exactly once before they are accessed again. Latency in clock cycles is computed with the clock rate measured at the start of the measurement.
 
-![latency plot](gpu-latency/latency_plot.svg)
+![latency plot](gpu-latency/latencies_AMD.svg)
 
-Sharp L1 cache transitions at 128/192/256 kB for NVIDIAS V100/A100/H100 and at 16kB for AMD's MI210. V100 and MI210 both have a 6MB L2 cache. The A100's and H100 have a segmented L2 cache at 2x20MB and 2x25MB, which manifests as a small intermediate plateau when data is fetched from the far L2 section. 
+The full L1 cache capacity of the AMD GPUs is clearly recognizable at the specified 16kB (MI100, MI210) or 32kB (RX6900XT, MI300X) L1 cache. The latencies of AMD's L1 caches are high, at more than 100 cycles. The RDNA2 based RX6900XT has better latencies than the GCN/CDNA peers, despite a higher clock speed. The RX6900XT' L1.5 cache level up to 128KB is as fast as the other GPUs L1 cache. 
+All the GPUs have a similar L2 cache latency between 200 and 300 cycles. RX6900XT and MI300X drop out of the L2 cache at exactly 4MB. For the MI300X, this is the capacity of a single XCD's L2 cache segment, of which it has eight. The lone thread running the pointer chasing benchmark only hits in its local L2 cache segment, and not in the other seven ones.
 
-The RDNA2 GPU, the RX6900XT, has the most interesting cache hierarchy with its 4 cache levels are clearly visible: the 16kB L0 cache, the 128kB semi-shared L1 cache, the 4MB L2 cache, and the 128MB Infinity cache. It is also the highest clocking GPU, so that the absolute access times would be lower than the other GPUs. Measuring its DRAM latency is difficult, because the DRAM interface does not clock up for a single wavefront, resulting in DRAM latencies > 2000 cycles. 
+The MI100 and MI210 drawn out transition from L2 cache to DRAM is likely because of a different replacement strategy than RX6900XT and MI300X.
+Both the RX6900XT and the MI300X have a last level cache of 128\MB and 256\MB, which keeps latencies low.
+All three HPC GPUs, MI100, MI210, and MI300x, show a latency increase starting at 64MB, likely because of TLB effects.
+
+The RX6900XT's memory interface does not clock up for a single thread, which results in inaccurately high DRAM latencies, which are cut off in the graph.
+
+![latency plot](gpu-latency/latencies_NV.svg)
+
+All NVIDIA GPUs feature thhe same ultra low latency L1 cache, with semi-sharp transitions at 128/192/256kB. The two consumer GPUs, A40 and L40, have slighlty less effective capacity than the specified 128KB. The A100's and H100 have a segmented L2 cache at 2x20MB and 2x30MB, which manifests as a small intermediate plateau when data is fetched from the far L2 section.
+The L40 has the largest L2 cache at 96MB, which it can use up to its specified capacity with low latency.
+
 ## gpu-cache
 
 Measures bandwidths of the first and second cache level. Launches one thread block per SM. Each thread block repeatedly reads the contents of the same buffer. Varying buffer sizes changes the targeted cache level.
