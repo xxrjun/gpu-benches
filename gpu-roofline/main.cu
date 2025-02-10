@@ -29,7 +29,7 @@ __global__ void testfun(T *const __restrict__ dA, T *const __restrict__ dB,
 
   T sum = 0;
 
-#pragma unroll 1
+//#pragma unroll 1
   for (int i = 0; i < M; i += 2) {
     T a = sA[i * BLOCKSIZE];
     T b = sB[i * BLOCKSIZE];
@@ -37,9 +37,10 @@ __global__ void testfun(T *const __restrict__ dA, T *const __restrict__ dB,
     T a2 = sA[(i + 1) * BLOCKSIZE];
     T b2 = sB[(i + 1) * BLOCKSIZE];
     T v2 = a2 - b2;
+    //#pragma unroll N
     for (int i = 0; i < N; i++) {
       v = v * a - b;
-      v2 = v2 * a2 - b2;
+      v2 = v2 * a - b;
     }
     sum += v + v2;
   }
@@ -75,7 +76,7 @@ __global__ void testfun_max_power(T *const __restrict__ dA,
 
 int main(int argc, char **argv) {
 
-  typedef double dtype;
+  typedef float dtype;
   const int M = 4000;
   // PARN is a constant from the Makefile, set via -DPARN=X
   const int N = PARN;
@@ -149,6 +150,10 @@ int main(int argc, char **argv) {
     for (int i = 0; i < omp_get_num_threads(); i++) {
 #pragma omp ordered
       {
+
+        //for (auto v : clockSeries)
+        //  std::cout << v << " ";
+        //std::cout << "\n"; 
         cout << setprecision(3) << fixed << deviceId << " " << blockCount
              << " blocks   " << setw(3) << N << " its      "
              << (2.0 + N * 2.0) / (2.0 * sizeof(dtype)) << " Fl/B      "
@@ -157,7 +162,7 @@ int main(int argc, char **argv) {
              << " GB/s    " << setw(6)
              << iters * (2 + N * 2) * data_len / dt * 1.0e-9 << " GF/s   "
              << clockSeries.median() << " Mhz   "
-             << powerSeries.maxValue() / 1000 << " W   "
+             << powerSeries.median() / 1000 << " W   "
              << temperatureSeries.median() << "°C\n";
       }
     }

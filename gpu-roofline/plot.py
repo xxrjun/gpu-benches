@@ -17,51 +17,54 @@ fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(7, 7))
 # fig3, ax3 = plt.subplots(figsize=(8, 4))
 
 
-filename = "genoa_normal.txt"
+filenames = ["h200.txt", "alex_a100_40.txt", "bxx.txt"]
 
 colors = ["#349999", "#CC1343", "#649903", "#c7aa3e"]
 
-with open(filename, newline="") as csvfile:
-    csvreader = csv.reader(csvfile, delimiter=" ", skipinitialspace=True)
+c = 0
+for filename in filenames:
+    with open(filename, newline="") as csvfile:
+        csvreader = csv.reader(csvfile, delimiter=" ", skipinitialspace=True)
 
-    datapoints = [[]]
+        datapoints = [[]]
 
-    for row in csvreader:
-        print(row)
-        if len(row) == 0:
-            datapoints.append([])
+        for row in csvreader:
+            print(row)
+            if len(row) == 0:
+                datapoints.append([])
 
-        elif len(row) == 16:
-            datapoints[-1].append(
-                [float(row[5]), float(row[9]), float(row[13]), float(row[11])]
+            elif len(row) == 16:
+                datapoints[-1].append(
+                    [float(row[5]), float(row[9]), float(row[13]), float(row[11])]
+                )
+
+        print(datapoints)
+        print()
+
+        for i in range(min(1, len(datapoints[1]))):
+            print([d[i][1] for d in datapoints if len(d) > 0])
+            ax1.plot(
+                [d[i][0] for d in datapoints if len(d) > 0],
+                [d[i][1] / 1000 for d in datapoints if len(d) > 0],
+                "-",
+                color=colors[c],
+                label=filename
             )
 
-    print(datapoints)
-    print()
+            ax2.plot(
+                [d[i][0] for d in datapoints if len(d) > 0],
+                [d[i][2] for d in datapoints if len(d) > 0],
+                "-",
+                color=colors[c],
+            )
 
-    for i in range(len(datapoints[1])):
-        print([d[i][1] for d in datapoints if len(d) > 0])
-        ax1.plot(
-            [d[i][0] for d in datapoints if len(d) > 0],
-            [d[i][1] / 1000 for d in datapoints if len(d) > 0],
-            "-",
-            color=colors[i],
-            label=list(["L40", "L40S"])[i],
-        )
-
-        ax2.plot(
-            [d[i][0] for d in datapoints if len(d) > 0],
-            [d[i][2] for d in datapoints if len(d) > 0],
-            "--",
-            color=colors[i],
-        )
-
-        ax3.plot(
-            [d[i][0] for d in datapoints if len(d) > 0],
-            [d[i][3] / 1000 for d in datapoints if len(d) > 0],
-            "-.",
-            color=colors[i],
-        )
+            ax3.plot(
+                [d[i][0] for d in datapoints if len(d) > 0],
+                [d[i][3] / 1000 for d in datapoints if len(d) > 0],
+                "-",
+                color=colors[c],
+            )
+            c += 1
 
 
 ax1.legend()

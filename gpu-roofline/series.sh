@@ -1,6 +1,6 @@
 #!/bin/bash
 
-range=512
+range=1024
 
 
 
@@ -8,9 +8,9 @@ range=512
 make ./build/$10 N=0 PREFIX=./build 1>&2
 make ./build/$11 N=1 PREFIX=./build 1>&2 &
 make ./build/$12 N=2 PREFIX=./build 1>&2 &
-make ./build/$14 N=4 PREFIX=./build 1>&2 &
 
-for (( d=8 ; d<=$range; d+=8 ))
+
+for (( d=4 ; d<=$range; d+= (d /  24 + 1)*2  ))
 do
     echo $d
     make ./build/$1$d N=$d PREFIX=./build 1>&2 &
@@ -32,10 +32,9 @@ echo "-- Finished Building --"
 ./build/$10
 ./build/$11
 ./build/$12
-./build/$14
 
 
-for (( d=8 ; d<=$range; d+=8 ))
+for (( d=4 ; d<=$range; d+= (d /  24 + 1)*2  ))
 do
     ./build/$1$d
 done
