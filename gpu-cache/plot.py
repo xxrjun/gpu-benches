@@ -39,15 +39,15 @@ for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
         ax.plot(
             sizes,
             bw,
-            label=filename[:-4].upper(),
-            color="C" + str(getOrderNumber(filename)),
+            label=order[getOrderNumber(filename)].upper(),
+            color=getDeviceColor(filename),
             **lineStyle,
         )
         ax2.plot(
             sizes,
             L2bw,
-            label=filename[:-4].upper(),
-            color="C" + str(getOrderNumber(filename)),
+            label=order[getOrderNumber(filename)].upper(),
+            color=getDeviceColor(filename),
             **lineStyle,
         )
 
