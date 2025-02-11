@@ -50,10 +50,8 @@ template <int N, int iters, int blockSize> double callKernel(int blockCount) {
   return 0.0;
 }
 
-template <int N> void measure() {
+template <int N, int blockSize> void measure() {
   const size_t iters = (size_t)1000000000 / N + 2;
-
-  const int blockSize = 512;
 
   cudaDeviceProp prop;
   int deviceId;
@@ -80,7 +78,7 @@ template <int N> void measure() {
   GPU_ERROR(cudaEventCreate(&stop));
 
   for (int i = 0; i < 15; i++) {
-    const size_t bufferCount = 2* N + i * 1282;
+    const size_t bufferCount = 2 * N + i * 1282;
     GPU_ERROR(cudaMalloc(&dA, bufferCount * sizeof(dtype)));
     initKernel<<<52, 256>>>(dA, bufferCount);
     GPU_ERROR(cudaMalloc(&dB, bufferCount * sizeof(dtype)));
@@ -99,24 +97,24 @@ template <int N> void measure() {
     float milliseconds = 0;
     GPU_ERROR(cudaEventElapsedTime(&milliseconds, start, stop));
     time.add(milliseconds / 1000);
-    
-    measureDRAMBytesStart();
-    callKernel<N, iters, blockSize>(blockCount);
-    auto metrics = measureDRAMBytesStop();
-    dram_read.add(metrics[0]);
-    dram_write.add(metrics[1]);
 
-    measureL2BytesStart();
-    callKernel<N, iters, blockSize>(blockCount);
-    metrics = measureL2BytesStop();
-    L2_read.add(metrics[0]);
-    L2_write.add(metrics[1]);
+    /*    measureDRAMBytesStart();
+        callKernel<N, iters, blockSize>(blockCount);
+        auto metrics = measureDRAMBytesStop();
+        dram_read.add(metrics[0]);
+        dram_write.add(metrics[1]);
 
+        measureL2BytesStart();
+        callKernel<N, iters, blockSize>(blockCount);
+        metrics = measureL2BytesStop();
+        L2_read.add(metrics[0]);
+        L2_write.add(metrics[1]);
+    */
 
-    GPU_ERROR(cudaFree(dA-i));
-    GPU_ERROR(cudaFree(dB-i));
+    GPU_ERROR(cudaFree(dA - i));
+    GPU_ERROR(cudaFree(dB - i));
   }
-  double blockDV = 2*N * sizeof(dtype);
+  double blockDV = 2 * N * sizeof(dtype);
 
   double bw = blockDV * blockCount * iters / time.minValue() / 1.0e9;
   cout << fixed << setprecision(0) << setw(10) << blockDV / 1024 << " kB" //
@@ -143,7 +141,7 @@ size_t constexpr expSeries(size_t N) {
 
 int main(int argc, char **argv) {
   initMeasureMetric();
-  unsigned int clock = getGPUClock();
+  // unsigned int clock = getGPUClock();
   cout << setw(13) << "data set"   //
        << setw(12) << "exec time"  //
        << setw(11) << "spread"     //
@@ -155,87 +153,88 @@ int main(int argc, char **argv) {
 
   initMeasureMetric();
 
-  //measure<256>();
-  measure<512>();
-  //measure<3 * 256>();
-  measure<2 * 512>();
-  measure<3 * 512>();
-  measure<4 * 512>();
-  measure<5 * 512>();
-  measure<6 * 512>();
-  measure<7 * 512>();
-  measure<8 * 512>();
-  measure<9 * 512>();
-  measure<10 * 512>();
-  measure<11 * 512>();
-  measure<12 * 512>();
-  measure<13 * 512>();
-  measure<14 * 512>();
-  measure<15 * 512>();
-  measure<16 * 512>();
-  measure<17 * 512>();
-  measure<18 * 512>();
-  measure<19 * 512>();
-  measure<20 * 512>();
-  measure<21 * 512>();
-  measure<22 * 512>();
-  measure<23 * 512>();
-  measure<24 * 512>();
-  measure<25 * 512>();
-  measure<26 * 512>();
-  measure<27 * 512>();
-  measure<28 * 512>();
-  measure<29 * 512>();
-  measure<30 * 512>();
-  measure<31 * 512>();
-  measure<32 * 512>();
+  measure<128, 128>();
+  measure<256, 256>();
+  measure<512, 512>();
+  measure<3 * 256, 256>();
+  measure<2 * 512, 512>();
+  measure<3 * 512, 512>();
+  measure<4 * 512, 512>();
+  measure<5 * 512, 512>();
+  measure<6 * 512, 512>();
+  measure<7 * 512, 512>();
+  measure<8 * 512, 512>();
+  measure<9 * 512, 512>();
+  measure<10 * 512, 512>();
+  measure<11 * 512, 512>();
+  measure<12 * 512, 512>();
+  measure<13 * 512, 512>();
+  measure<14 * 512, 512>();
+  measure<15 * 512, 512>();
+  measure<16 * 512, 512>();
+  measure<17 * 512, 512>();
+  measure<18 * 512, 512>();
+  measure<19 * 512, 512>();
+  measure<20 * 512, 512>();
+  measure<21 * 512, 512>();
+  measure<22 * 512, 512>();
+  measure<23 * 512, 512>();
+  measure<24 * 512, 512>();
+  measure<25 * 512, 512>();
+  measure<26 * 512, 512>();
+  measure<27 * 512, 512>();
+  measure<28 * 512, 512>();
+  measure<29 * 512, 512>();
+  measure<30 * 512, 512>();
+  measure<31 * 512, 512>();
+  measure<32 * 512, 512>();
 
-  measure<expSeries(1)>();
-  measure<expSeries(2)>();
-  measure<expSeries(3)>();
-  measure<expSeries(4)>();
-  measure<expSeries(5)>();
-  measure<expSeries(6)>();
-  measure<expSeries(7)>();
-  measure<expSeries(8)>();
-  measure<expSeries(9)>();
-  measure<expSeries(10)>();
-  measure<expSeries(11)>();
-  measure<expSeries(12)>();
-  measure<expSeries(13)>();
-  measure<expSeries(14)>();
-  measure<expSeries(16)>();
-  measure<expSeries(17)>();
-  measure<expSeries(18)>();
-  measure<expSeries(19)>();
-  measure<expSeries(20)>();
-  measure<expSeries(21)>();
-  measure<expSeries(22)>();
-  measure<expSeries(23)>();
-  measure<expSeries(24)>();
-  measure<expSeries(25)>();
-  measure<expSeries(26)>();
-  measure<expSeries(27)>();
-  measure<expSeries(28)>();
-  measure<expSeries(29)>();
-  measure<expSeries(30)>();
-  measure<expSeries(31)>();
-  measure<expSeries(32)>();
-  measure<expSeries(33)>();
-  measure<expSeries(34)>();
-  measure<expSeries(35)>();
-  measure<expSeries(36)>();
-  measure<expSeries(37)>();
-  measure<expSeries(38)>();
-  measure<expSeries(39)>();
-  measure<expSeries(40)>();
-  measure<expSeries(41)>();
-  measure<expSeries(42)>();
-  measure<expSeries(43)>();
-  measure<expSeries(44)>();
-  measure<expSeries(45)>();
-  measure<expSeries(46)>();
-  measure<expSeries(47)>();
-  measure<expSeries(48)>();
-  measure<expSeries(49)>();
+  measure<expSeries(1), 512>();
+  measure<expSeries(2), 512>();
+  measure<expSeries(3), 512>();
+  measure<expSeries(4), 512>();
+  measure<expSeries(5), 512>();
+  measure<expSeries(6), 512>();
+  measure<expSeries(7), 512>();
+  measure<expSeries(8), 512>();
+  measure<expSeries(9), 512>();
+  measure<expSeries(10), 512>();
+  measure<expSeries(11), 512>();
+  measure<expSeries(12), 512>();
+  measure<expSeries(13), 512>();
+  measure<expSeries(14), 512>();
+  measure<expSeries(16), 512>();
+  measure<expSeries(17), 512>();
+  measure<expSeries(18), 512>();
+  measure<expSeries(19), 512>();
+  measure<expSeries(20), 512>();
+  measure<expSeries(21), 512>();
+  measure<expSeries(22), 512>();
+  measure<expSeries(23), 512>();
+  measure<expSeries(24), 512>();
+  measure<expSeries(25), 512>();
+  measure<expSeries(26), 512>();
+  measure<expSeries(27), 512>();
+  measure<expSeries(28), 512>();
+  measure<expSeries(29), 512>();
+  measure<expSeries(30), 512>();
+  measure<expSeries(31), 512>();
+  measure<expSeries(32), 512>();
+  measure<expSeries(33), 512>();
+  measure<expSeries(34), 512>();
+  measure<expSeries(35), 512>();
+  measure<expSeries(36), 512>();
+  measure<expSeries(37), 512>();
+  measure<expSeries(38), 512>();
+  measure<expSeries(39), 512>();
+  measure<expSeries(40), 512>();
+  measure<expSeries(41), 512>();
+  measure<expSeries(42), 512>();
+  measure<expSeries(43), 512>();
+  measure<expSeries(44), 512>();
+  measure<expSeries(45), 512>();
+  measure<expSeries(46), 512>();
+  measure<expSeries(47), 512>();
+  measure<expSeries(48), 512>();
+  measure<expSeries(49), 512>();
 }
