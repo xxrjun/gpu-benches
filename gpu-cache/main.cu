@@ -30,12 +30,14 @@ __global__ void sumKernel(dtype *__restrict__ A, const dtype *__restrict__ B,
   dtype localSum = (dtype)0;
 
   B += threadIdx.x;
+
 #pragma unroll N / BLOCKSIZE> 32   ? 1 : 32 / (N / BLOCKSIZE)
   for (int iter = 0; iter < iters; iter++) {
     B += zero;
+    auto B2 = B + N;
 #pragma unroll N / BLOCKSIZE >= 64 ? 32 : N / BLOCKSIZE
     for (int i = 0; i < N; i += BLOCKSIZE) {
-      localSum += B[i];
+      localSum += B[i] * B2[i];
     }
     localSum *= (dtype)1.3;
   }
@@ -51,7 +53,7 @@ template <int N, int iters, int blockSize> double callKernel(int blockCount) {
 template <int N> void measure() {
   const size_t iters = (size_t)1000000000 / N + 2;
 
-  const int blockSize = 256;
+  const int blockSize = 512;
 
   cudaDeviceProp prop;
   int deviceId;
@@ -73,20 +75,31 @@ template <int N> void measure() {
 
   GPU_ERROR(cudaDeviceSynchronize());
 
+  cudaEvent_t start, stop;
+  GPU_ERROR(cudaEventCreate(&start));
+  GPU_ERROR(cudaEventCreate(&stop));
+
   for (int i = 0; i < 15; i++) {
-    const size_t bufferCount = N; // + i * 1282;
+    const size_t bufferCount = 2* N + i * 1282;
     GPU_ERROR(cudaMalloc(&dA, bufferCount * sizeof(dtype)));
     initKernel<<<52, 256>>>(dA, bufferCount);
     GPU_ERROR(cudaMalloc(&dB, bufferCount * sizeof(dtype)));
     initKernel<<<52, 256>>>(dB, bufferCount);
+
+    dA += i;
+    dB += i;
+
     GPU_ERROR(cudaDeviceSynchronize());
 
-    double t1 = dtime();
+    GPU_ERROR(cudaEventRecord(start));
     callKernel<N, iters, blockSize>(blockCount);
-    GPU_ERROR(cudaDeviceSynchronize());
-    double t2 = dtime();
-    time.add((t2 - t1));
-    /*
+    GPU_ERROR(cudaEventRecord(stop));
+
+    GPU_ERROR(cudaEventSynchronize(stop));
+    float milliseconds = 0;
+    GPU_ERROR(cudaEventElapsedTime(&milliseconds, start, stop));
+    time.add(milliseconds / 1000);
+    
     measureDRAMBytesStart();
     callKernel<N, iters, blockSize>(blockCount);
     auto metrics = measureDRAMBytesStop();
@@ -98,11 +111,12 @@ template <int N> void measure() {
     metrics = measureL2BytesStop();
     L2_read.add(metrics[0]);
     L2_write.add(metrics[1]);
-    */
-    GPU_ERROR(cudaFree(dA));
-    GPU_ERROR(cudaFree(dB));
+
+
+    GPU_ERROR(cudaFree(dA-i));
+    GPU_ERROR(cudaFree(dB-i));
   }
-  double blockDV = N * sizeof(dtype);
+  double blockDV = 2*N * sizeof(dtype);
 
   double bw = blockDV * blockCount * iters / time.minValue() / 1.0e9;
   cout << fixed << setprecision(0) << setw(10) << blockDV / 1024 << " kB" //
@@ -141,9 +155,9 @@ int main(int argc, char **argv) {
 
   initMeasureMetric();
 
-  measure<256>();
+  //measure<256>();
   measure<512>();
-  measure<3 * 256>();
+  //measure<3 * 256>();
   measure<2 * 512>();
   measure<3 * 512>();
   measure<4 * 512>();
