@@ -11,15 +11,23 @@ sys.path.append("..")
 from device_order import *
 
 
-fig, ax = plt.subplots(figsize=(8, 4))
-# fig2, ax2 = plt.subplots(figsize=(8, 4))
-# fig3, ax3 = plt.subplots(figsize=(8, 4))
+fig, ax = plt.subplots(figsize=(6, 4))
+fig2, ax2 = plt.subplots(figsize=(6, 4))
 
 
 maxbars = {}
 minbars = {}
 
-devicesToInclude = ["a40", "l40", "v100", "a100_80", "gh200", "mi210", "rx6900xt"]
+devicesToInclude = [
+    "a40",
+    "l40",
+    "v100",
+    "a100_80",
+    "gh200",
+    "mi210",
+    "rx6900xt",
+    "mi300x",
+]
 
 
 for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
@@ -29,73 +37,114 @@ for filename in sorted(os.listdir("."), key=lambda f1: getOrderNumber(f1)):
         continue
     with open(filename, newline="") as csvfile:
         csvreader = csv.reader(csvfile, delimiter=" ", skipinitialspace=True)
-        threads = []
-        locs = []
-        init = []
-        read = []
-        scale = []
-        triad = []
-        stencil3pt = []
-        stencil5pt = []
+
+        mediData = {}
+        maxiData = {}
+        miniData = {}
+        readData = {}
+        triadData = {}
+        initData = {}
 
         for row in csvreader:
-            if row[0].startswith("block"):
+            if len(row) < 18 or not row[0].isnumeric():
                 continue
 
-            # print(row)
-            threads.append(int(row[1]))
-            init.append(float(row[6]))
-            read.append(float(row[7]))
-            scale.append(float(row[8]))
-            triad.append(float(row[9]))
-            locs.append(float(row[2]))
-            stencil3pt.append(float(row[10]))
-            stencil5pt.append(float(row[11]))
+            print(row)
+            threads = int(row[2])
+            size = int(row[3])
+            mini = float(row[10])
+            medi = float(row[11])
+            maxi = float(row[12])
 
-        # locs = threads#[15 + l / 6 if l > 15 else l for l in locs]
-        # print(locs)
-        # print(threads)
-        # ax.plot(locs, init,  "-v", label=filename, color="C" + str(color))
+            read = float(row[8])
+            triad = float(row[14])
+            init = float(row[17])
+
+            if threads not in mediData:
+                mediData[threads] = {}
+                maxiData[threads] = {}
+                miniData[threads] = {}
+                readData[threads] = {}
+                triadData[threads] = {}
+                initData[threads] = {}
+
+            mediData[threads][size] = medi
+            maxiData[threads][size] = maxi
+            miniData[threads][size] = mini
+            readData[threads][size] = read
+            triadData[threads][size] = triad
+            initData[threads][size] = init
+
+        # ax.scatter(
+        #    [v for b in data for v in data[b].keys()],
+        #    [v for b in data for v in data[b].values()],
+        #    label=filename[:-4].upper(),
+        #    color=getDeviceColor(filename),
+        #    alpha=0.2,
+        #    #   **lineStyle
+        # )
+
+        miniBWPerSize = {}
+        maxBWPerSize = {}
+        mediBWPerSize = {}
+
+        for threads in mediData.keys():
+            for size in mediData[threads].keys():
+                if (
+                    size not in mediBWPerSize
+                    or mediBWPerSize[size] < mediData[threads][size]
+                ):
+                    maxBWPerSize[size] = maxiData[threads][size]
+                    mediBWPerSize[size] = mediData[threads][size]
+                    miniBWPerSize[size] = miniData[threads][size]
+
+        ax.fill_between(
+            maxBWPerSize.keys(),
+            miniBWPerSize.values(),
+            maxBWPerSize.values(),
+            alpha=0.4,
+            color=getDeviceColor(filename),
+            edgecolor=None,
+        )
         ax.plot(
-            np.array(threads),
-            scale,
+            maxBWPerSize.keys(),
+            mediBWPerSize.values(),
+            color=getDeviceColor(filename),
+            label=order[getOrderNumber(filename)].upper(),
+            # *lineStyle,
+        )
+        if len(maxBWPerSize) > 0:
+            ax.set_xlim([list(maxBWPerSize.keys())[0], list(maxBWPerSize.keys())[-1]])
+
+        bws = []
+
+        closestSize = 0
+        for b in mediData.values():
+            bws.append(0)
+            closestSize = 0
+            for v in b.items():
+                if abs(v[0] - 2000) < abs(closestSize - 2000):
+
+                    bws[-1] = v[1]
+                    closestSize = v[0]
+
+        ax2.plot(
+            [k for k in mediData.keys() if k < 400000],
+            bws[: len([k for k in mediData.keys() if k < 400000])],
             label=filename[:-4].upper(),
             color=getDeviceColor(filename),
-            **lineStyle
+            # *lineStyle,
         )
+
+        print(closestSize)
+
         print(filename, getOrderNumber(filename))
-        # ax.plot(threads, triad, "-<", label=filename, color="C" + str(color))
-        # ax.plot(threads, read, "-^", label=filename, color="C" + str(color))
-
-        maxbars[filename] = [
-            read[-1],
-            scale[-1],
-            triad[-1],
-            init[-1],
-            # stencil3pt[-1],
-            # stencil5pt[-1],
-        ]
-
-        mClosest = 0
-        for m in range(len(threads)):
-            if abs(threads[m] - 10000) < abs(threads[mClosest] - 10000):
-                mClosest = m
-
-        print(threads[mClosest])
-        minbars[filename] = [
-            read[mClosest],
-            scale[mClosest],
-            triad[mClosest],
-            init[mClosest],
-            # stencil3pt[0],
-            # stencil5pt[0],
-        ]
 
 
 ########ax.set_xticks(threads[::5])
 # ax.set_xticklabels(threads, rotation="vertical")
-ax.set_xlabel("threads")
-ax.set_ylabel("DRAM bandwidth, GB/s")
+ax.set_xlabel("dataset size, MB")
+ax.set_ylabel("Bandwidth, GB/s")
 
 # ax.axhline(1400, linestyle="--", color="C1")
 # ax.axhline(800, linestyle="--", color="C0")
@@ -103,59 +152,41 @@ ax.set_ylabel("DRAM bandwidth, GB/s")
 # ax.grid()
 ax.legend()
 ax.set_ylim([0, ax.get_ylim()[1]])
-ax.set_xlim([0, ax.get_xlim()[1]])
+
+ax.set_xscale("log", base=2)
+formatter = matplotlib.ticker.FuncFormatter(
+    lambda x, pos: "{0:g} kB".format(x) if x < 1024 else "{0:g}".format(x / 1024)
+)
+ax.get_xaxis().set_major_formatter(formatter)
+ax.set_xticks(
+    [
+        1024,
+        2048,
+        4096,
+        8192,
+        20 * 1024,
+        40 * 1024,
+        96 * 1024,
+        256 * 1024,
+        512 * 1024,
+    ]
+)
+
 
 fig.tight_layout()
-fig.savefig("cuda-stream.svg", dpi=300)
+fig.savefig("gpu-l2-stream.pdf", dpi=300)
+
+
+ax2.set_xlabel("threads")
+ax2.set_ylabel("Bandwidth, GB/s")
+
+
+ax2.legend()
+ax2.set_xlim([0, 370000])
+ax2.set_ylim([0, ax2.get_ylim()[1]])
+
+fig2.tight_layout()
+fig2.savefig("gpu-l2-stream-scaling.pdf", dpi=300)
+
 
 plt.show()
-
-print(maxbars)
-
-
-def plotXbars(xbars, filename):
-    fig2, ax2 = plt.subplots(figsize=(8, 4))
-
-    valueCount = len(list(xbars.values())[0])
-    c = 0
-    for m in range(valueCount):
-        ax2.bar(
-            np.arange(len(xbars))
-            + 0.8
-            / valueCount
-            * (m + 0.5 - valueCount / 2),  # + (0.9 * valueCount)  - 0.5,
-            [i[m] for i in xbars.values()],
-            width=0.8 / valueCount,
-            color=device_color_palette[c],
-            label=["read", "scale", "triad", "init", "1D3PT", "1D5PT"][m],
-        )
-        # for n in range(len(maxbars)):
-        #    ax2.text(
-        #        n + 0.9 * (m - 0.5) / valueCount - 0.35,
-        #        150,
-        #        ["init", "read", "scale", "triad", "1D3PT", "1D5PT"][m],
-        #        rotation=90,
-        #        color="w",
-        #        horizontalalignment="left",
-        #    )
-        c += 1
-
-    # ax2.text(-0.4, 51, "init", rotation=90, color="w")
-    # ax2.text(-0.28, 51, "read", rotation=90, color="w")
-    # ax2.text(-0.16, 51, "scale", rotation=90, color="w")
-    # ax2.text(-0.04, 51, "triad", rotation=90, color="w")
-    # ax2.text(0.08, 51, "1D3PT", rotation=90, color="w")
-    # ax2.text(0.22, 51, "1D5pt", rotation=90, color="w")
-
-    print(list(maxbars.keys()))
-    ax2.set_xticks(range(len(list(maxbars.keys()))))
-    ax2.set_xticklabels([f[:-4].upper() for f in list(maxbars.keys())])
-    ax2.set_ylabel("DRAM Bandwidth, GB/s")
-    ax2.legend()
-    fig2.tight_layout()
-    fig2.savefig(filename, dpi=300)
-    plt.show()
-
-
-plotXbars(maxbars, "maxbars.pdf")
-plotXbars(minbars, "minbars.pdf")
