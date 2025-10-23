@@ -17,6 +17,7 @@ device_color_palette = [
     "#FFE100",
     "#09047f",
     "#296F20",
+    "#AB84E0",
 ]
 
 order = [
@@ -32,6 +33,7 @@ order = [
     "mi300a",
     "a100_40",
     "h100_pcie",
+    "gb200"
 ]
 
 

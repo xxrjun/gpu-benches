@@ -90,4 +90,4 @@ fig2.tight_layout()
 
 plt.show()
 fig.savefig("cuda-cache.svg")
-fig2.savefig("cuda-cache-l2.pdf")
+# fig2.savefig("cuda-cache-l2.pdf")
