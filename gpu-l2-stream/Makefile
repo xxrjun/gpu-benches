@@ -7,8 +7,8 @@ TEMP_HIPCC := $(shell which hipcc)
 HIP_HOME :=  /opt/rocm
 
 # internal flags
-
-NVCCFLAGS   := -std=c++20 -O3 -arch=sm_70 --compiler-options="-O2 -pipe -Wall -fopenmp -g" -Xcompiler -rdynamic --generate-line-info  -Xcompiler \"-Wl,-rpath,$(CUDA_HOME)/extras/CUPTI/lib64/\" -Xcompiler "-Wall"
+SM      	?= $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -n 1 | sed 's/\.//g')
+NVCCFLAGS   := -std=c++20 -O3 -gencode arch=compute_$(SM),code=sm_$(SM)--compiler-options="-O2 -pipe -Wall -fopenmp -g" -Xcompiler -rdynamic --generate-line-info  -Xcompiler \"-Wl,-rpath,$(CUDA_HOME)/extras/CUPTI/lib64/\" -Xcompiler "-Wall"
 CCFLAGS     := 
 NAME 		:= l2-stream
 LDFLAGS     := -L$(CUDA_HOME)/lib64 -L$(CUDA_HOME)/extras/CUPTI/lib64 -lcupti -lcuda   -lnvidia-ml -lnvperf_host -lnvperf_target
