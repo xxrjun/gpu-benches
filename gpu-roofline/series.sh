@@ -2,7 +2,7 @@
 
 range=1024
 
-
+mkdir -p build
 
     
 make ./build/$10 N=0 PREFIX=./build 1>&2
