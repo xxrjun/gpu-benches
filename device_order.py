@@ -33,6 +33,7 @@ order = [
     "mi300a",
     "a100_40",
     "h100_pcie",
+    "h200_nvl",
     "gb200"
 ]
 
@@ -48,6 +49,9 @@ long_order = [
     "AMD Instinct MI300X",
     "AMD Radeon RX 6900 XT",
     "NVIDIA A100-SXM4-40G",
+    "NVIDIA H100 PCIe",
+    "NVIDIA H200 NVL",
+    "NVIDIA GB200",
 ]
 
 
